@@ -1,12 +1,12 @@
 {
     "name": "ollama-api-proxy",
-    "version": "1.0.0a",
+    "version": "1.0.0b",
     "description": "Multi-Provider Ollama Proxy Server for Node.js (OpenAI + Gemini)",
     "type": "module",
     "main": "server.js",
     "repository": {
         "type": "git",
-        "url": "https://github.com/xrip/ollama-proxy.git"
+        "url": "https://github.com/xrip/ollama-api-proxy.git"
     },
     "scripts": {
         "start": "node ./src/index.js",
