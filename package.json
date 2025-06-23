@@ -1,6 +1,6 @@
 {
     "name": "ollama-api-proxy",
-    "version": "1.0.0",
+    "version": "1.0.0a",
     "description": "Multi-Provider Ollama Proxy Server for Node.js (OpenAI + Gemini)",
     "type": "module",
     "main": "server.js",

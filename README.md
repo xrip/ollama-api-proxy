@@ -78,6 +78,42 @@ docker build -t ollama-proxy .
 docker run -p 11434:11434 --env-file .env ollama-proxy
 ```
 
+### Using npx (Node.js)
+
+```bash
+# Create a directory for your configuration
+mkdir ollama-proxy-config
+cd ollama-proxy-config
+
+# Create .env file with your API keys
+echo "OPENAI_API_KEY=your_openai_api_key" > .env
+echo "GEMINI_API_KEY=your_gemini_api_key" >> .env
+
+# Run the proxy server using npx
+npx ollama-api-proxy
+
+# Alternatively, you can specify a specific version
+# npx ollama-api-proxy@1.0.0
+```
+
+### Using bunx (Bun)
+
+```bash
+# Create a directory for your configuration
+mkdir ollama-proxy-config
+cd ollama-proxy-config
+
+# Create .env file with your API keys
+echo "OPENAI_API_KEY=your_openai_api_key" > .env
+echo "GEMINI_API_KEY=your_gemini_api_key" >> .env
+
+# Run the proxy server using bunx
+bunx ollama-api-proxy
+
+# Alternatively, you can specify a specific version
+# bunx ollama-api-proxy@1.0.0
+```
+
 ## Configuration
 
 The proxy server is configured using environment variables:
