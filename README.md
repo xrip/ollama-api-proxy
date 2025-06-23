@@ -48,7 +48,7 @@ environment variables.
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/ollama-proxy.git
+git clone https://github.com/xrip/ollama-proxy.git
 cd ollama-proxy
 
 # Install dependencies
@@ -66,7 +66,7 @@ npm start
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/ollama-proxy.git
+git clone https://github.com/xrip/ollama-proxy.git
 cd ollama-proxy
 
 # Create .env file with your API keys
