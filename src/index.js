@@ -40,6 +40,7 @@ if (Object.keys(providers).length === 0) {
 const models = {
     'gpt-4o': { provider: 'openai', model: 'gpt-4o' },
     'gpt-4o-mini': { provider: 'openai', model: 'gpt-4o-mini' },
+    'gpt-4o-nano': { provider: 'openai', model: 'gpt-4o-nano' },
     'gemini-2.0-flash': { provider: 'google', model: 'gemini-2.0-flash' },
     'gemini-2.5-flash': { provider: 'google', model: 'gemini-2.5-flash' },
     'deepseek-r1': { provider: 'openrouter', model: 'deepseek/deepseek-r1-0528:free' },
