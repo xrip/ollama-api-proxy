@@ -38,11 +38,14 @@ if (Object.keys(providers).length === 0) {
 
 // Model configurations
 const models = {
-    'gpt-4o': { provider: 'openai', model: 'gpt-4o' },
-    'gpt-4o-mini': { provider: 'openai', model: 'gpt-4o-mini' },
-    'gpt-4o-nano': { provider: 'openai', model: 'gpt-4o-nano' },
+    'gpt-4.1': { provider: 'openai', model: 'gpt-4.1' },
+
+    'gpt-4.1-mini': { provider: 'openai', model: 'gpt-4.1-mini' },
+    'gpt-4.1-nano': { provider: 'openai', model: 'gpt-4.1-nano' },
+
     'gemini-2.0-flash': { provider: 'google', model: 'gemini-2.0-flash' },
     'gemini-2.5-flash': { provider: 'google', model: 'gemini-2.5-flash' },
+
     'deepseek-r1': { provider: 'openrouter', model: 'deepseek/deepseek-r1-0528:free' },
 };
 
@@ -94,10 +97,12 @@ const generateResponse = async (modelConfig, messages, options = {}) => {
     const result = await generateText({
         model,
         messages: validMessages,
-        temperature: options.temperature || 0.7,
-        maxTokens: options.num_predict || 2048,
-        topP: options.top_p || 0.9,
+        // temperature: options.temperature || 0.7,
+        // maxTokens: options.num_predict || 16384,
+        // topP: options.top_p || 0.9,
     });
+
+    console.debug(result);
 
     // Handle different response formats from upstream
     let text = result.text;
@@ -132,16 +137,57 @@ const generateResponse = async (modelConfig, messages, options = {}) => {
 };
 
 // Route handlers
+const handleModelGenerationRequest = async (req, res, messageExtractor, responseKey) => {
+    try {
+        const body = await getBody(req);
+        const { model, options } = body;
+
+        const modelConfig = validateModel(model);
+        const messages = messageExtractor(body);
+
+        console.debug(model, messages);
+
+        const result = await generateResponse(modelConfig, messages || [], options);
+
+        const response = {
+            model,
+            created_at: new Date().toISOString(),
+            done: true,
+        };
+
+        // Set the main content key based on the request type
+        if (responseKey === 'message') {
+            response.message = {
+                role: 'assistant',
+                content: result.text,
+            };
+        } else if (responseKey === 'response') {
+            response.response = result.text;
+        }
+
+        // Add reasoning if available
+        if (result.reasoning) {
+            if (responseKey === 'message') {
+                response.message.reasoning = result.reasoning;
+            } else {
+                response.reasoning = result.reasoning;
+            }
+        }
+        // Add messages array if available (for debugging or advanced use cases)
+        if (result.messages) {
+            response.messages = result.messages;
+        }
+        sendJSON(res, response);
+    } catch (error) {
+        console.error('API request error:', error.message);
+        sendJSON(res, { error: error.message }, 500);
+    }
+};
+
 const routes = {
-    'GET /': (req, res) => {
-        sendJSON(res, { message: 'Ollama Multi-Provider Proxy', status: 'running' });
-    },
-
-    'GET /api/version': (req, res) => {
-        sendJSON(res, { version: '1.0.1' });
-    },
-
-    'GET /api/tags': (req, res) => {
+    'GET /': (request, response) => sendJSON(response, { message: 'Ollama Multi-Provider Proxy', status: 'running' }),
+    'GET /api/version': (request, response) => sendJSON(response, { version: '1.0.1' }),
+    'GET /api/tags': (request, response) => {
         const availableModels = Object.entries(models)
             .filter(([name, config]) => providers[config.provider])
             .map(([name]) => ({
@@ -151,74 +197,23 @@ const routes = {
                 size: 1000000000,
                 digest: `sha256:${name.replace(/[^a-zA-Z0-9]/g, '')}`,
             }));
-
-        sendJSON(res, { models: availableModels });
+        sendJSON(response, { models: availableModels });
     },
-
     'POST /api/chat': async (req, res) => {
-        try {
-            const { model, messages, options } = await getBody(req);
-            const modelConfig = validateModel(model);
-
-            const result = await generateResponse(modelConfig, messages || [], options);
-
-            const response = {
-                model,
-                created_at: new Date().toISOString(),
-                message: {
-                    role: 'assistant',
-                    content: result.text,
-                },
-                done: true,
-            };
-
-            // Add reasoning if available
-            if (result.reasoning) {
-                response.message.reasoning = result.reasoning;
-            }
-
-            // Add messages array if available (for debugging or advanced use cases)
-            if (result.messages) {
-                response.messages = result.messages;
-            }
-
-            sendJSON(res, response);
-        } catch (error) {
-            console.error('Chat error:', error.message);
-            sendJSON(res, { error: error.message }, 500);
-        }
+        await handleModelGenerationRequest(
+            req,
+            res,
+            body => body.messages,
+            'message',
+        );
     },
-
     'POST /api/generate': async (req, res) => {
-        try {
-            const { model, prompt, options } = await getBody(req);
-            const modelConfig = validateModel(model);
-
-            const messages = [{ role: 'user', content: prompt }];
-            const result = await generateResponse(modelConfig, messages, options);
-
-            const response = {
-                model,
-                created_at: new Date().toISOString(),
-                response: result.text,
-                done: true,
-            };
-
-            // Add reasoning if available
-            if (result.reasoning) {
-                response.reasoning = result.reasoning;
-            }
-
-            // Add messages array if available (for debugging or advanced use cases)
-            if (result.messages) {
-                response.messages = result.messages;
-            }
-
-            sendJSON(res, response);
-        } catch (error) {
-            console.error('Generate error:', error.message);
-            sendJSON(res, { error: error.message }, 500);
-        }
+        await handleModelGenerationRequest(
+            req,
+            res,
+            body => [{ role: 'user', content: body.prompt }],
+            'response',
+        );
     },
 };
 
