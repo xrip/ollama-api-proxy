@@ -186,7 +186,7 @@ const handleModelGenerationRequest = async (req, res, messageExtractor, response
 
 const routes = {
     'GET /': (request, response) => sendJSON(response, { message: 'Ollama Multi-Provider Proxy', status: 'running' }),
-    'GET /api/version': (request, response) => sendJSON(response, { version: '1.0.1' }),
+    'GET /api/version': (request, response) => sendJSON(response, { version: '1.0.1b' }),
     'GET /api/tags': (request, response) => {
         const availableModels = Object.entries(models)
             .filter(([name, config]) => providers[config.provider])
