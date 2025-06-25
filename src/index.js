@@ -37,12 +37,13 @@ if (Object.keys(providers).length === 0) {
 
 // Model configurations
 const models = {
-    'gpt-4.1': { provider: 'openai', model: 'gpt-4.1' },
     'gpt-4.1-mini': { provider: 'openai', model: 'gpt-4.1-mini' },
     'gpt-4.1-nano': { provider: 'openai', model: 'gpt-4.1-nano' },
+
     'gemini-2.0-flash': { provider: 'google', model: 'gemini-2.0-flash' },
     'gemini-2.5-flash': { provider: 'google', model: 'gemini-2.5-flash' },
     'gemini-2.5-flash-lite-preview-06-17': { provider: 'google', model: 'gemini-2.5-flash-lite-preview-06-17' },
+
     'deepseek-r1': { provider: 'openrouter', model: 'deepseek/deepseek-r1-0528:free' },
 };
 
@@ -53,15 +54,14 @@ const getBody = request => new Promise(resolve => {
     request.on('end', () => resolve(body ? JSON.parse(body) : {}));
 });
 
-const sendJSON = (response, data, status = 200) => {
+const sendJSON = (response, data, status = 200) =>
     response.writeHead(status, {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
-    });
-    response.end(JSON.stringify(data));
-};
+    }).end(JSON.stringify(data));
+
 
 const validateModel = name => {
     const config = models[name];
@@ -75,14 +75,13 @@ const validateModel = name => {
 };
 
 // Prepare messages for AI SDK
-const prepareMessages = (messages) => {
-    return messages
-        .filter(msg => msg.content && msg.content.trim()) // Remove empty messages
-        .map(msg => ({
-            role: msg.role === 'assistant' ? 'assistant' : 'user',
-            content: String(msg.content).trim(),
-        }));
-};
+const prepareMessages = messages => messages
+    .filter(msg => msg.content && msg.content.trim()) // Remove empty messages
+    .map(msg => ({
+        role: msg.role === 'assistant' ? 'assistant' : 'user',
+        content: String(msg.content).trim(),
+    }));
+
 
 // Generate complete text response using AI SDK
 const generateResponse = async (modelConfig, messages, options = {}) => {
@@ -241,18 +240,19 @@ const streamResponse = async (response, modelConfig, messages, options = {}, res
 const handleModelGenerationRequest = async (request, response, messageExtractor, responseKey) => {
     try {
         const body = await getBody(request);
+        console.trace(body);
         const { model, options = {}, stream = false } = body;
 
         const modelConfig = validateModel(model);
-        const messages = messageExtractor(body);
+        const messages = messageExtractor(body) || [];
 
         console.debug(model, messages, { stream });
 
         // Handle streaming vs non-streaming responses
         if (stream) {
-            await streamResponse(response, modelConfig, messages || [], options, responseKey);
+            await streamResponse(response, modelConfig, messages, options, responseKey);
         } else {
-            const result = await generateResponse(modelConfig, messages || [], options);
+            const result = await generateResponse(modelConfig, messages, options);
 
             const response = {
                 model,
@@ -324,18 +324,18 @@ const routes = {
             }));
         sendJSON(response, { models: availableModels });
     },
-    'POST /api/chat': async (req, res) => {
+    'POST /api/chat': async (request, response) => {
         await handleModelGenerationRequest(
-            req,
-            res,
+            request,
+            response,
             body => body.messages,
             'message',
         );
     },
-    'POST /api/generate': async (req, res) => {
+    'POST /api/generate': async (request, response) => {
         await handleModelGenerationRequest(
-            req,
-            res,
+            request,
+            response,
             body => [{ role: 'user', content: body.prompt }],
             'response',
         );
@@ -343,51 +343,50 @@ const routes = {
 };
 
 // HTTP Server
-const server = http.createServer(async (req, res) => {
-    const routeKey = `${req.method} ${new URL(req.url, `http://${req.headers.host}`).pathname}`;
+const ollamaProxyServer = http.createServer(async (request, response) => {
+    const routeKey = `${request.method} ${new URL(request.url, `http://${request.headers.host}`).pathname}`;
 
-    console.log(routeKey);
+    console.info(routeKey);
 
     // Handle CORS preflight
-    if (req.method === 'OPTIONS') {
-        res.writeHead(200, {
+    if (request.method === 'OPTIONS') {
+        response.writeHead(200, {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type',
         });
-        res.end();
+        response.end();
         return;
     }
 
     try {
         const handler = routes[routeKey];
         if (handler) {
-            await handler(req, res);
+            await handler(request, response);
         } else {
-            sendJSON(res, { error: 'Not found' }, 404);
+            sendJSON(response, { error: 'Not found' }, 404);
         }
     } catch (error) {
         console.error('Server error:', error.message);
-        if (!res.headersSent) {
-            sendJSON(res, { error: 'Internal server error' }, 500);
+        if (!response.headersSent) {
+            sendJSON(response, { error: 'Internal server error' }, 500);
         }
     }
 });
 
 // Start server
-server.listen(PORT, () => {
+ollamaProxyServer.listen(PORT, () => {
     const availableModels = Object.keys(models).filter(name => providers[models[name].provider]);
 
     console.log(`🚀 Ollama Proxy with Streaming running on http://localhost:${PORT}`);
-    console.log(`📋 Available models: ${availableModels.join(', ')}`);
     console.log(`🔑 Providers: ${Object.keys(providers).join(', ')}`);
-    console.log(`✨ Streaming support enabled - add "stream": true to requests`);
+    console.log(`📋 Available models: ${availableModels.join(', ')}`);
 });
 
 // Graceful shutdown
 ['SIGINT', 'SIGTERM'].forEach(signal => {
     process.on(signal, () => {
         console.log(`\n🛑 Received ${signal}, shutting down...`);
-        server.close(() => process.exit(0));
+        ollamaProxyServer.close(() => process.exit(0));
     });
 });
