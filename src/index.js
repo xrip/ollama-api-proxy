@@ -50,20 +50,20 @@ const models = {
 };
 
 // Utility functions
-const getBody = req => new Promise(resolve => {
+const getBody = request => new Promise(resolve => {
     let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => resolve(body ? JSON.parse(body) : {}));
+    request.on('data', chunk => body += chunk);
+    request.on('end', () => resolve(body ? JSON.parse(body) : {}));
 });
 
-const sendJSON = (res, data, status = 200) => {
-    res.writeHead(status, {
+const sendJSON = (response, data, status = 200) => {
+    response.writeHead(status, {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
     });
-    res.end(JSON.stringify(data));
+    response.end(JSON.stringify(data));
 };
 
 const validateModel = name => {
@@ -102,7 +102,7 @@ const generateResponse = async (modelConfig, messages, options = {}) => {
         // topP: options.top_p || 0.9,
     });
 
-    console.debug(result);
+    // console.debug(result);
 
     // Handle different response formats from upstream
     let text = result.text;
