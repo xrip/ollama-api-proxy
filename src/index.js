@@ -1,17 +1,12 @@
 #!/usr/bin/env node
 
-// ===================================================
-// Multi-Provider Ollama Proxy Server
-// Proxies requests from ollama api to to Gemni/OpenAI
-// ===================================================
-
 import http from 'node:http';
-import process from 'node:process';
-import { URL } from 'node:url';
-import { ColorConsole } from './console.js';
 import dotenv from 'dotenv';
-
-dotenv.config();
+import { generateText } from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { ColorConsole } from './console.js';
 
 global.console = new ColorConsole({
     stdout: process.stdout,
@@ -19,333 +14,256 @@ global.console = new ColorConsole({
     timestamp: process.env.NODE_ENV !== 'production',
 });
 
-// Configuration
-const PROXY_PORT = 11434;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// Validate API Keys
-if (!OPENAI_API_KEY && !GEMINI_API_KEY) {
-    console.error('❌ Error: Neither OPENAI_API_KEY nor GEMINI_API_KEY is set. Please set at least one API key.');
+dotenv.config();
+
+const PORT = process.env.PORT || 11434;
+
+// Initialize providers based on available API keys
+const providers = {};
+if (process.env.OPENAI_API_KEY) {
+    providers.openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+if (process.env.GEMINI_API_KEY) {
+    providers.google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY });
+}
+if (process.env.OPENROUTER_API_KEY) {
+    providers.openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
+}
+
+if (Object.keys(providers).length === 0) {
+    console.error('❌ No API keys found. Set OPENAI_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY');
     process.exit(1);
 }
 
-if (!OPENAI_API_KEY) {
-    console.warn('⚠️ Warning: OPENAI_API_KEY is not set. OpenAI models will not be available.');
-}
-
-if (!GEMINI_API_KEY) {
-    console.warn('⚠️ Warning: GEMINI_API_KEY is not set. Gemini models will not be available.');
-}
-
-const DEFAULT_TEMPERATURE = 0.7;
-const DEFAULT_MAX_TOKENS = 2048;
-const DEFAULT_TOP_P = 0.9;
-const DEFAULT_TOP_K = 40;
-
 // Model configurations
-const MODELS = {
-    // OpenAI Chat Models
-    'gpt-4o': { provider: 'openai', type: 'chat', model: 'gpt-4o' },
-    'gpt-4o-mini': { provider: 'openai', type: 'chat', model: 'gpt-4o-mini' },
-    'gpt-4.1-mini': { provider: 'openai', type: 'chat', model: 'gpt-4.1-mini' },
-    'gpt-4.1-nano': { provider: 'openai', type: 'chat', model: 'gpt-4.1-nano' },
-
-    // Gemini Models
-    'gemini-2.0-flash': { provider: 'gemini', type: 'chat', model: 'gemini-2.0-flash' },
-    'gemini-2.5-flash': { provider: 'gemini', type: 'chat', model: 'gemini-2.5-flash' },
+const models = {
+    'gpt-4o': { provider: 'openai', model: 'gpt-4o' },
+    'gpt-4o-mini': { provider: 'openai', model: 'gpt-4o-mini' },
+    'gemini-2.0-flash': { provider: 'google', model: 'gemini-2.0-flash' },
+    'gemini-2.5-flash': { provider: 'google', model: 'gemini-2.5-flash' },
+    'deepseek-r1': { provider: 'openrouter', model: 'deepseek/deepseek-r1-0528:free' },
 };
 
-// Helper functions
-function validateModel(modelName) {
-    const config = MODELS[modelName];
+// Utility functions
+const getBody = req => new Promise(resolve => {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => resolve(body ? JSON.parse(body) : {}));
+});
+
+const sendJSON = (res, data, status = 200) => {
+    res.writeHead(status, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+    });
+    res.end(JSON.stringify(data));
+};
+
+const validateModel = name => {
+    const config = models[name];
     if (!config) {
-        throw new Error(`Model ${modelName} not supported`);
+        throw new Error(`Model ${name} not supported`);
+    }
+    if (!providers[config.provider]) {
+        throw new Error(`Provider ${config.provider} not available`);
     }
     return config;
-}
+};
 
-function createOllamaResponse(modelName, content, isGenerate = false) {
-    const baseResponse = {
-        model: modelName,
-        created_at: new Date().toISOString(),
-        done: true,
-    };
+// Generate text using AI SDK
+const generateResponse = async (modelConfig, messages, options = {}) => {
+    const provider = providers[modelConfig.provider];
+    const model = provider(modelConfig.model);
 
-    if (isGenerate) {
-        return { ...baseResponse, response: content };
+    // Convert and validate messages for AI SDK
+    const validMessages = messages
+        .filter(msg => msg.content && msg.content.trim()) // Remove empty messages
+        .map(msg => ({
+            role: msg.role === 'assistant' ? 'assistant' : 'user',
+            content: String(msg.content).trim(),
+        }));
+
+    if (validMessages.length === 0) {
+        throw new Error('No valid messages found');
     }
 
-    return {
-        ...baseResponse,
-        message: {
-            role: 'assistant',
-            content,
-        },
-    };
-}
-
-
-const corsHeaders = response => Object.entries({
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-}).forEach(([key, value]) => {
-    response.setHeader(key, value);
-});
-
-function sendJsonResponse(response, data, status = 200) {
-    corsHeaders(response);
-    response.writeHead(status, { 'Content-Type': 'application/json' });
-    response.end(JSON.stringify(data));
-}
-
-const requestBody = (request) => new Promise((resolve, reject) => {
-    let body = '';
-    request.on('data', chunk => body += chunk.toString());
-    request.on('end', () => {
-        try {
-            const jsonData = body ? JSON.parse(body) : {};
-            resolve(jsonData);
-        } catch (error) {
-            reject(new Error(`Invalid JSON: ${error.message}`));
-        }
-    });
-    request.on('error', reject);
-});
-
-// OpenAI API functions
-async function callOpenAI(endpoint, data) {
-    const response = await fetch(`https://api.openai.com/v1/${endpoint}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify(data),
+    const result = await generateText({
+        model,
+        messages: validMessages,
+        temperature: options.temperature || 0.7,
+        maxTokens: options.num_predict || 2048,
+        topP: options.top_p || 0.9,
     });
 
-    if (!response.ok) {
-        throw new Error(`OpenAI API error: ${response.status} - ${await response.text()}`);
-    }
+    // Handle different response formats from upstream
+    let text = result.text;
+    let reasoning = result.reasoning || null;
+    let responseMessages = null;
 
-    return response.json();
-}
+    // If upstream returns messages array, extract the assistant's response
+    if (result.messages && Array.isArray(result.messages)) {
+        responseMessages = result.messages;
 
-function convertToOpenAI(ollamaRequest, modelName) {
-    const options = ollamaRequest.options || {};
+        // Find the last assistant message for the main response
+        const assistantMessage = result.messages
+            .filter(msg => msg.role === 'assistant')
+            .pop();
 
-    return {
-        model: modelName,
-        messages: ollamaRequest.messages || [],
-        temperature: options.temperature || DEFAULT_TEMPERATURE,
-        max_tokens: options.num_predict || DEFAULT_MAX_TOKENS,
-        top_p: options.top_p || DEFAULT_TOP_P,
-    };
-}
+        if (assistantMessage) {
+            text = assistantMessage.content || assistantMessage.text || text;
 
-function convertFromOpenAI(response, modelName, isGenerate = false) {
-    const content = response.choices?.[0]?.message?.content || 'No response generated';
-    if (!response.choices?.[0]?.message?.content) {
-        console.error(response);
-    }
-    return createOllamaResponse(modelName, content, isGenerate);
-}
-
-// Gemini API functions
-async function callGemini(endpoint, data) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${endpoint}?key=${GEMINI_API_KEY}`;
-
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-        throw new Error(`Gemini API error: ${response.status} - ${await response.text()}`);
-    }
-
-    return response.json();
-}
-
-function convertToGemini(ollamaRequest) {
-    const messages = ollamaRequest.messages || [];
-    const options = ollamaRequest.options || {};
-    const contents = [];
-
-    for (const message of messages) {
-        const part = { text: message.content };
-
-        if (message.role === 'user') {
-            contents.push({ parts: [part], role: 'user' });
-        } else if (message.role === 'assistant') {
-            contents.push({ parts: [part], role: 'model' });
-        } else if (message.role === 'system') {
-            // Prepend system message to first user message or create new user message
-            if (contents.length === 0 || contents[0].role !== 'user') {
-                contents.unshift({ parts: [part], role: 'user' });
-            } else {
-                contents[0].parts[0].text = `${message.content}\n\n${contents[0].parts[0].text}`;
+            // Check if the assistant message has reasoning
+            if (assistantMessage.reasoning) {
+                reasoning = assistantMessage.reasoning;
             }
         }
     }
 
+    // Return structured response
     return {
-        contents,
-        generationConfig: {
-            temperature: options.temperature || DEFAULT_TEMPERATURE,
-            maxOutputTokens: options.num_predict || DEFAULT_MAX_TOKENS,
-            topP: options.top_p || DEFAULT_TOP_P,
-            topK: options.top_k || DEFAULT_TOP_K,
-        },
+        text: text || '',
+        reasoning: reasoning,
+        messages: responseMessages,
     };
-}
-
-function convertFromGemini(response, modelName, isGenerate = false) {
-    const content = response.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
-    if (!response.candidates?.[0]?.content?.parts?.[0]?.text) {
-        console.error(response.candidates?.[0]);
-    }
-
-    return createOllamaResponse(modelName, content, isGenerate);
-}
-
-// Route handlers
-async function handleChat(request, response) {
-    const ollamaRequest = await requestBody(request);
-    const modelConfig = validateModel(ollamaRequest.model);
-
-    switch (modelConfig.provider) {
-        case 'openai' : {
-            console.debug('openai');
-
-            const openAiResonse = await callOpenAI(
-                'chat/completions',
-                convertToOpenAI(ollamaRequest, modelConfig.model),
-            );
-
-            return sendJsonResponse(response, convertFromOpenAI(openAiResonse, ollamaRequest.model));
-        }
-        case 'gemini' : {
-            console.debug('gemini');
-            const geminiResponse = await callGemini(
-                `${modelConfig.model}:generateContent`,
-                convertToGemini(ollamaRequest),
-            );
-
-            return sendJsonResponse(response, convertFromGemini(geminiResponse, ollamaRequest.model));
-        }
-    }
-}
-
-async function handleGenerate(req, res) {
-    const ollamaRequest = await requestBody(req);
-    const modelConfig = validateModel(ollamaRequest.model);
-
-    // Convert generate request to chat format
-    const chatRequest = {
-        messages: [{ role: 'user', content: ollamaRequest.prompt }],
-        options: ollamaRequest.options,
-        model: ollamaRequest.model,
-    };
-
-    if (modelConfig.provider === 'openai') {
-        const openaiRequest = convertToOpenAI(chatRequest, modelConfig.model);
-        const openaiResponse = await callOpenAI('chat/completions', openaiRequest);
-        const result = convertFromOpenAI(openaiResponse, ollamaRequest.model, true);
-        sendJsonResponse(res, result);
-        return;
-    }
-
-    if (modelConfig.provider === 'gemini') {
-        const geminiRequest = convertToGemini(chatRequest);
-        const geminiResponse = await callGemini(`${modelConfig.model}:generateContent`, geminiRequest);
-        const result = convertFromGemini(geminiResponse, ollamaRequest.model, true);
-        sendJsonResponse(res, result);
-        return;
-    }
-}
-
-function handleTags(req, res) {
-    const models = Object.entries(MODELS).map(([name, config]) => ({
-        name,
-        model: name,
-        modified_at: new Date().toISOString(),
-        size: config.provider === 'openai' ? 6400000000 : 4274519832,
-        digest: `sha256:${config.provider}-${name.replace(/[^a-zA-Z0-9]/g, '')}-digest`,
-        details: {
-            parent_model: '',
-            format: 'gguf',
-            family: config.provider === 'openai' ? 'gpt' : 'llama',
-            families: [config.provider === 'openai' ? 'gpt' : 'llama'],
-            parameter_size: '1024.0B',
-            quantization_level: 'Q8_0',
-        },
-    }));
-
-    sendJsonResponse(res, { models });
-}
-
-// Route mapping
-const routes = {
-    'GET /': (request, response) => response.writeHead(200, { 'Content-Type': 'text/plain' }).end('Ollama Multi-Provider Proxy is running'),
-    'GET /api/version': (request, response) => sendJsonResponse(response, { version: '1.0.0' }),
-    'GET /api/tags': handleTags,
-    'POST /api/chat': handleChat,
-    'POST /api/generate': handleGenerate,
 };
 
-// Create HTTP server
-const server = http.createServer(async (req, res) => {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const routeKey = `${req.method} ${url.pathname}`;
+// Route handlers
+const routes = {
+    'GET /': (req, res) => {
+        sendJSON(res, { message: 'Ollama Multi-Provider Proxy', status: 'running' });
+    },
 
-    console.info(`${routeKey}`);
+    'GET /api/version': (req, res) => {
+        sendJSON(res, { version: '1.0.1' });
+    },
+
+    'GET /api/tags': (req, res) => {
+        const availableModels = Object.entries(models)
+            .filter(([name, config]) => providers[config.provider])
+            .map(([name]) => ({
+                name,
+                model: name,
+                modified_at: new Date().toISOString(),
+                size: 1000000000,
+                digest: `sha256:${name.replace(/[^a-zA-Z0-9]/g, '')}`,
+            }));
+
+        sendJSON(res, { models: availableModels });
+    },
+
+    'POST /api/chat': async (req, res) => {
+        try {
+            const { model, messages, options } = await getBody(req);
+            const modelConfig = validateModel(model);
+
+            const result = await generateResponse(modelConfig, messages || [], options);
+
+            const response = {
+                model,
+                created_at: new Date().toISOString(),
+                message: {
+                    role: 'assistant',
+                    content: result.text,
+                },
+                done: true,
+            };
+
+            // Add reasoning if available
+            if (result.reasoning) {
+                response.message.reasoning = result.reasoning;
+            }
+
+            // Add messages array if available (for debugging or advanced use cases)
+            if (result.messages) {
+                response.messages = result.messages;
+            }
+
+            sendJSON(res, response);
+        } catch (error) {
+            console.error('Chat error:', error.message);
+            sendJSON(res, { error: error.message }, 500);
+        }
+    },
+
+    'POST /api/generate': async (req, res) => {
+        try {
+            const { model, prompt, options } = await getBody(req);
+            const modelConfig = validateModel(model);
+
+            const messages = [{ role: 'user', content: prompt }];
+            const result = await generateResponse(modelConfig, messages, options);
+
+            const response = {
+                model,
+                created_at: new Date().toISOString(),
+                response: result.text,
+                done: true,
+            };
+
+            // Add reasoning if available
+            if (result.reasoning) {
+                response.reasoning = result.reasoning;
+            }
+
+            // Add messages array if available (for debugging or advanced use cases)
+            if (result.messages) {
+                response.messages = result.messages;
+            }
+
+            sendJSON(res, response);
+        } catch (error) {
+            console.error('Generate error:', error.message);
+            sendJSON(res, { error: error.message }, 500);
+        }
+    }
+};
+
+// HTTP Server
+const server = http.createServer(async (req, res) => {
+    const routeKey = `${req.method} ${new URL(req.url, `http://${req.headers.host}`).pathname}`;
+
+    console.log(routeKey);
 
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
-        corsHeaders(res);
-        res.writeHead(200);
+        res.writeHead(200, {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+        });
         res.end();
         return;
     }
 
     try {
         const handler = routes[routeKey];
-        if (!handler) {
-            sendJsonResponse(res, { error: 'Not found' }, 404);
-            return;
+        if (handler) {
+            await handler(req, res);
+        } else {
+            sendJSON(res, { error: 'Not found' }, 404);
         }
-
-        await handler(req, res);
     } catch (error) {
-        console.error('Error:', error.message);
-        sendJsonResponse(res, { error: error.message }, 500);
+        console.error('Server error:', error.message);
+        sendJSON(res, { error: 'Internal server error' }, 500);
     }
 });
 
 // Start server
-server.listen(PROXY_PORT, () => {
-    console.log(`✅ Server running on port ${PROXY_PORT}`);
-    console.log(`🔑 OpenAI API Key: ${OPENAI_API_KEY ? '✅ SET' : '❌ NOT SET'}`);
-    console.log(`🔑 Gemini API Key: ${GEMINI_API_KEY ? '✅ SET' : '❌ NOT SET'}`);
-    console.log(`📋 Supported models: \n- ${Object.keys(MODELS).join(',\n- ')}\n`);
-    console.log(`🌐 Health check: http://localhost:${PROXY_PORT}/\n`);
+server.listen(PORT, () => {
+    const availableModels = Object.keys(models).filter(name => providers[models[name].provider]);
+
+    console.log(`🚀 Ollama Proxy running on http://localhost:${PORT}`);
+    console.log(`📋 Available models: ${availableModels.join(', ')}`);
+    console.log(`🔑 Providers: ${Object.keys(providers).join(', ')}`);
 });
 
 // Graceful shutdown
-process.on('SIGINT', () => {
-    console.log('\n🛑 Shutting down proxy server...');
-    server.close(() => {
-        console.log('✅ Server stopped gracefully');
-        process.exit(0);
-    });
-});
-
-process.on('SIGTERM', () => {
-    console.log('\n🛑 Received SIGTERM, shutting down...');
-    server.close(() => {
-        process.exit(0);
+['SIGINT', 'SIGTERM'].forEach(signal => {
+    process.on(signal, () => {
+        console.log(`\n🛑 Received ${signal}, shutting down...`);
+        server.close(() => process.exit(0));
     });
 });
