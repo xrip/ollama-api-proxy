@@ -218,7 +218,7 @@ const routes = {
             console.error('Generate error:', error.message);
             sendJSON(res, { error: error.message }, 500);
         }
-    }
+    },
 };
 
 // HTTP Server
