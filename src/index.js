@@ -57,6 +57,7 @@ const getBody = request => new Promise(resolve => {
 const sendJSON = (response, data, status = 200) =>
     response.writeHead(status, {
         'Content-Type': 'application/json',
+        'charset': 'utf-8',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
@@ -307,11 +308,8 @@ const handleModelGenerationRequest = async (request, response, messageExtractor,
 };
 
 const routes = {
-    'GET /': (request, response) => sendJSON(response, {
-        message: 'Ollama Multi-Provider Proxy with Streaming',
-        status: 'running',
-    }),
-    'GET /api/version': (request, response) => sendJSON(response, { version: '1.0.1c' }),
+    'GET /': (request, response) => response.end('Ollama is running in proxy mode.'),
+    'GET /api/version': (request, response) => sendJSON(response, { version: '1.0.1d' }),
     'GET /api/tags': (request, response) => {
         const availableModels = Object.entries(models)
             .filter(([name, config]) => providers[config.provider])
