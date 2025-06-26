@@ -1,6 +1,6 @@
 # Ollama to OpenAI/Gemini/OpenRouter Proxy
 
-[![Version](https://img.shields.io/badge/version-1.0.1b-blue.svg)](https://github.com/xrip/ollama-api-proxy)
+[![Version](https://img.shields.io/badge/version-1.0.1e-blue.svg)](https://github.com/xrip/ollama-api-proxy)
 
 A Multi-Provider Ollama Proxy Server that allows using JetBrains AI Assistant with third-party commercial LLMs like
 OpenAI, Google Gemini, and OpenRouter, taking advantage of their free tier usage.
@@ -32,14 +32,14 @@ environment variables.
 
 ### OpenAI Models
 
-- gpt-4.1
+- gpt-4o-mini
 - gpt-4.1-mini
 - gpt-4.1-nano
 
 ### Google Gemini Models
 
-- gemini-2.0-flash
 - gemini-2.5-flash
+- gemini-2.5-flash-lite-preview-06-17
 
 ### OpenRouter Models
 

@@ -5,7 +5,6 @@ import dotenv from 'dotenv';
 import { generateText, streamText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { ColorConsole } from './console.js';
 
 global.console = new ColorConsole({
@@ -27,7 +26,12 @@ if (process.env.GEMINI_API_KEY) {
     providers.google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY });
 }
 if (process.env.OPENROUTER_API_KEY) {
-    providers.openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
+    providers.openrouter = createOpenAI({
+        apiKey: process.env.OPENROUTER_API_KEY,
+        baseURL: 'https://openrouter.ai/api/v1',
+        compatibility: 'compatible',
+        name: 'openrouter',
+    });
 }
 
 if (Object.keys(providers).length === 0) {
@@ -169,7 +173,6 @@ const streamResponse = async (response, modelConfig, messages, options = {}, res
 
         // Stream the tokens
         for await (const delta of result.textStream) {
-
             const chunk = {
                 model: modelName,
                 created_at: new Date().toISOString(),
@@ -238,8 +241,9 @@ const streamResponse = async (response, modelConfig, messages, options = {}, res
 // Route handlers
 const handleModelGenerationRequest = async (request, response, messageExtractor, responseKey) => {
     try {
+
         const body = await getBody(request);
-        console.trace(body);
+        console.info(body);
         const { model, options = {}, stream = false } = body;
 
         const modelConfig = validateModel(model);
@@ -307,7 +311,7 @@ const handleModelGenerationRequest = async (request, response, messageExtractor,
 
 const routes = {
     'GET /': (request, response) => response.end('Ollama is running in proxy mode.'),
-    'GET /api/version': (request, response) => sendJSON(response, { version: '1.0.1d' }),
+    'GET /api/version': (request, response) => sendJSON(response, { version: '1.0.1e' }),
     'GET /api/tags': (request, response) => {
         const availableModels = Object.entries(models)
             .filter(([name, config]) => providers[config.provider])
@@ -342,17 +346,17 @@ const routes = {
 const ollamaProxyServer = http.createServer(async (request, response) => {
     const routeKey = `${request.method} ${request.url.split('?')[0]}`;
 
+
     console.info(routeKey);
+
 
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
-        response.writeHead(200, {
+        return response.writeHead(200, {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type',
-        });
-        response.end();
-        return;
+        }).end();
     }
 
     try {
