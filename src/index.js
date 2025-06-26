@@ -37,10 +37,10 @@ if (Object.keys(providers).length === 0) {
 
 // Model configurations
 const models = {
+    'gpt-4o-mini': { provider: 'openai', model: 'gpt-4o-mini' },
     'gpt-4.1-mini': { provider: 'openai', model: 'gpt-4.1-mini' },
     'gpt-4.1-nano': { provider: 'openai', model: 'gpt-4.1-nano' },
 
-    'gemini-2.0-flash': { provider: 'google', model: 'gemini-2.0-flash' },
     'gemini-2.5-flash': { provider: 'google', model: 'gemini-2.5-flash' },
     'gemini-2.5-flash-lite-preview-06-17': { provider: 'google', model: 'gemini-2.5-flash-lite-preview-06-17' },
 
@@ -148,7 +148,7 @@ const streamResponse = async (response, modelConfig, messages, options = {}, res
 
     // Set streaming headers
     response.writeHead(200, {
-        'Content-Type': 'text/plain',
+        'Content-Type': 'application/x-ndjson',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
@@ -166,11 +166,9 @@ const streamResponse = async (response, modelConfig, messages, options = {}, res
         });
 
         const modelName = modelConfig.model;
-        let accumulatedText = '';
 
         // Stream the tokens
         for await (const delta of result.textStream) {
-            accumulatedText += delta;
 
             const chunk = {
                 model: modelName,
@@ -255,7 +253,7 @@ const handleModelGenerationRequest = async (request, response, messageExtractor,
         } else {
             const result = await generateResponse(modelConfig, messages, options);
 
-            const response = {
+            const responseData = {
                 model,
                 created_at: new Date().toISOString(),
                 done: true,
@@ -263,29 +261,29 @@ const handleModelGenerationRequest = async (request, response, messageExtractor,
 
             // Set the main content key based on the request type
             if (responseKey === 'message') {
-                response.message = {
+                responseData.message = {
                     role: 'assistant',
                     content: result.text,
                 };
             } else if (responseKey === 'response') {
-                response.response = result.text;
+                responseData.response = result.text;
             }
 
             // Add reasoning if available
             if (result.reasoning) {
                 if (responseKey === 'message') {
-                    response.message.reasoning = result.reasoning;
+                    responseData.message.reasoning = result.reasoning;
                 } else {
-                    response.reasoning = result.reasoning;
+                    responseData.reasoning = result.reasoning;
                 }
             }
 
             // Add messages array if available (for debugging or advanced use cases)
             if (result.messages) {
-                response.messages = result.messages;
+                responseData.messages = result.messages;
             }
 
-            sendJSON(response, response);
+            sendJSON(response, responseData);
         }
     } catch (error) {
         console.error('API request error:', error.message);
@@ -342,7 +340,7 @@ const routes = {
 
 // HTTP Server
 const ollamaProxyServer = http.createServer(async (request, response) => {
-    const routeKey = `${request.method} ${new URL(request.url, `http://${request.headers.host}`).pathname}`;
+    const routeKey = `${request.method} ${request.url.split('?')[0]}`;
 
     console.info(routeKey);
 
