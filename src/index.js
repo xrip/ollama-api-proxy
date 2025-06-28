@@ -103,7 +103,7 @@ const generateResponse = async (modelConfig, messages, options = {}) => {
         model,
         messages: validMessages,
         temperature: options.temperature,
-        maxTokens: options.num_predict,
+        maxTokens: options.num_predict || 32768,
         topP: options.top_p,
     });
 
