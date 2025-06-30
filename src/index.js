@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
 import dotenv from 'dotenv';
 import { generateText, streamText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -39,17 +41,31 @@ if (Object.keys(providers).length === 0) {
     process.exit(1);
 }
 
-// Model configurations
-const models = {
-    'gpt-4o-mini': { provider: 'openai', model: 'gpt-4o-mini' },
-    'gpt-4.1-mini': { provider: 'openai', model: 'gpt-4.1-mini' },
-    'gpt-4.1-nano': { provider: 'openai', model: 'gpt-4.1-nano' },
+const DEFAULT_MODELS_PATH = path.join(process.cwd(), 'models.json');
 
-    'gemini-2.5-flash': { provider: 'google', model: 'gemini-2.5-flash' },
-    'gemini-2.5-flash-lite-preview-06-17': { provider: 'google', model: 'gemini-2.5-flash-lite-preview-06-17' },
+let models = {};
+try {
+    if (fs.existsSync(DEFAULT_MODELS_PATH)) {
+        models = JSON.parse(fs.readFileSync(DEFAULT_MODELS_PATH, 'utf8'));
+        console.log(`✅ Loaded models from ${DEFAULT_MODELS_PATH}`);
+    } else {
+        // Built-in models
+        models = {
+            'gpt-4o-mini': { provider: 'openai', model: 'gpt-4o-mini' },
+            'gpt-4.1-mini': { provider: 'openai', model: 'gpt-4.1-mini' },
+            'gpt-4.1-nano': { provider: 'openai', model: 'gpt-4.1-nano' },
 
-    'deepseek-r1': { provider: 'openrouter', model: 'deepseek/deepseek-r1-0528:free' },
-};
+            'gemini-2.5-flash': { provider: 'google', model: 'gemini-2.5-flash' },
+            'gemini-2.5-flash-lite': { provider: 'google', model: 'gemini-2.5-flash-lite' },
+
+            'deepseek-r1': { provider: 'openrouter', model: 'deepseek/deepseek-r1-0528:free' },
+        };
+        console.log('ℹ️ Using built-in models. Create a models.json file to customize.');
+    }
+} catch (error) {
+    console.error(`❌ Error loading models.json: ${error.message}`);
+    process.exit(1);
+}
 
 // Utility functions
 const getBody = request => new Promise(resolve => {

@@ -30,6 +30,9 @@ environment variables.
 
 ## Supported Models
 
+The proxy server supports a variety of models from OpenAI, Google Gemini, and OpenRouter. The default configurations
+are:
+
 ### OpenAI Models
 
 - gpt-4o-mini
@@ -44,6 +47,28 @@ environment variables.
 ### OpenRouter Models
 
 - deepseek-r1
+
+## Customizing Models
+
+You can customize the available models by creating a `models.json` file in the directory where you run the proxy server.
+This file should contain a JSON object where keys are the model names you want to expose, and values are objects
+specifying the `provider` (e.g., `openai`, `google`, `openrouter`) and the actual `model` name as expected by the
+respective API.
+
+If a `models.json` file is found in the current working directory, the proxy will load models from it. Otherwise, it
+will use the built-in default models.
+
+**Example `models.json`:**
+
+```json
+{
+    "my-custom-gpt": { "provider": "openai", "model": "gpt-4o-mini" },
+    "my-gemini-pro": { "provider": "google", "model": "gemini-pro" },
+    "my-openrouter-model": { "provider": "openrouter", "model": "mistralai/mistral-7b-instruct-v0.2" }
+}
+```
+
+This allows you to rename models, add new ones supported by the providers, or remove models you don't intend to use.
 
 ## Installation
 
