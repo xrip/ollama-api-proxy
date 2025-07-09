@@ -8,4 +8,4 @@ COPY .env package.json models.json ./src/*.js ./
 RUN bun install --backend=hardlink
 
 EXPOSE 11434
-CMD ["bun", "src/index.js"]
+CMD ["bun", "./index.js"]
