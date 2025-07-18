@@ -22,5 +22,9 @@
     "deepseek-r1": {
         "provider": "openrouter",
         "model": "deepseek/deepseek-r1-0528:free"
+    },
+        "kimi-k2": {
+        "provider": "openrouter",
+        "model": "moonshotai/kimi-k2:free"
     }
 }
