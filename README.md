@@ -3,7 +3,7 @@
 [![Version](https://img.shields.io/badge/version-1.0.1e-blue.svg)](https://github.com/xrip/ollama-api-proxy)
 
 A Multi-Provider Ollama Proxy Server that allows using JetBrains AI Assistant with third-party commercial LLMs like
-OpenAI, Google Gemini, and OpenRouter, taking advantage of their free tier usage.
+OpenAI, Google Gemini, and OpenRouter, taking advantage of their free tier usage. Especialy for Kimi K2 and Deepseek R1
 
 ## Overview
 
