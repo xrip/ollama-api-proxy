@@ -91,6 +91,7 @@ npm install
 echo "OPENAI_API_KEY=your_openai_api_key" > .env
 echo "GEMINI_API_KEY=your_gemini_api_key" >> .env
 echo "OPENROUTER_API_KEY=your_openrouter_api_key" >> .env
+echo "OPENROUTER_API_URL=your_openrouter_api_url" >> .env  # optional, default is https://openrouter.ai/api/v1
 
 # Start the server
 npm start
@@ -107,6 +108,7 @@ cd ollama-api-proxy
 echo "OPENAI_API_KEY=your_openai_api_key" > .env
 echo "GEMINI_API_KEY=your_gemini_api_key" >> .env
 echo "OPENROUTER_API_KEY=your_openrouter_api_key" >> .env
+echo "OPENROUTER_API_URL=your_openrouter_api_url" >> .env  # optional, default is https://openrouter.ai/api/v1
 
 # Build and run the Docker container
 docker build -t ollama-proxy .
@@ -124,6 +126,7 @@ cd ollama-proxy-config
 echo "OPENAI_API_KEY=your_openai_api_key" > .env
 echo "GEMINI_API_KEY=your_gemini_api_key" >> .env
 echo "OPENROUTER_API_KEY=your_openrouter_api_key" >> .env
+echo "OPENROUTER_API_URL=your_openrouter_api_url" >> .env  # optional, default is https://openrouter.ai/api/v1
 
 # Run the proxy server using npx
 npx ollama-api-proxy
@@ -143,6 +146,7 @@ cd ollama-proxy-config
 echo "OPENAI_API_KEY=your_openai_api_key" > .env
 echo "GEMINI_API_KEY=your_gemini_api_key" >> .env
 echo "OPENROUTER_API_KEY=your_openrouter_api_key" >> .env
+echo "OPENROUTER_API_URL=your_openrouter_api_url" >> .env  # optional, default is https://openrouter.ai/api/v1
 
 # Run the proxy server using bunx
 bunx ollama-api-proxy
@@ -159,6 +163,7 @@ The proxy server is configured using environment variables:
 - `OPENAI_API_KEY`: Your OpenAI API key (required for OpenAI models)
 - `GEMINI_API_KEY`: Your Google Gemini API key (required for Gemini models)
 - `OPENROUTER_API_KEY`: Your OpenRouter API key (required for OpenRouter models)
+- `OPENROUTER_API_URL`: Your OpenRouter API url (optional for OpenRouter models)
 - `NODE_ENV`: Set to `production` for production use or `development` for development
 
 You can set these variables in a `.env` file in the project root.
