@@ -163,7 +163,7 @@ The proxy server is configured using environment variables:
 - `OPENAI_API_KEY`: Your OpenAI API key (required for OpenAI models)
 - `GEMINI_API_KEY`: Your Google Gemini API key (required for Gemini models)
 - `OPENROUTER_API_KEY`: Your OpenRouter API key (required for OpenRouter models)
-- `OPENROUTER_API_URL`: Your OpenRouter API url (optional for OpenRouter models)
+- `OPENROUTER_API_URL`: Your OpenRouter API URL (optional for OpenRouter models)
 - `NODE_ENV`: Set to `production` for production use or `development` for development
 
 You can set these variables in a `.env` file in the project root.
