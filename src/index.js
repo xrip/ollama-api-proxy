@@ -30,7 +30,7 @@ if (process.env.GEMINI_API_KEY) {
 if (process.env.OPENROUTER_API_KEY) {
     providers.openrouter = createOpenAI({
         apiKey: process.env.OPENROUTER_API_KEY,
-        baseURL: 'https://openrouter.ai/api/v1',
+        baseURL: process.env.OPENROUTER_API_URL || 'https://openrouter.ai/api/v1',
         compatibility: 'compatible',
         name: 'openrouter',
     });
