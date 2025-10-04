@@ -11,6 +11,14 @@
         "provider": "openai",
         "model": "gpt-4.1-nano"
     },
+    "gpt-4o": {
+        "provider": "openai",
+        "model": "gpt-4o"
+    },
+    "gpt-5-nano": {
+        "provider": "openai",
+        "model": "gpt-5-nano"
+    },    
     "gemini-2.5-flash": {
         "provider": "google",
         "model": "gemini-2.5-flash"
