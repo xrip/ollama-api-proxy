@@ -438,7 +438,6 @@ const handleModelGenerationRequest = async (request, response, messageExtractor,
 
     // Handle streaming vs non-streaming
     if (stream) {
-    //   await streamResponse(response, modelConfig, messages, options, responseKey);
       await streamResponse(response, modelConfig, messages, options, responseKey, requestContext);
     } else {
       const result = await generateResponse(modelConfig, messages, options);
