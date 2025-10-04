@@ -78,7 +78,7 @@ async function buildOpenAIImageBlocksFromOllama(body) {
         console.debug(`[vision] msg[${i}] images:`, m.images.length);
         for (const it of m.images) {
           const dataUrl = await toJpegDataUrl(it);
-          blocks.push({ type: 'image', image: dataUrl, mimeType: 'image/jpeg' });
+          blocks.push({ type: 'image', image: dataUrl });
           
         }
       }
