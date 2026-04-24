@@ -25,6 +25,7 @@ environment variables.
 - Compatible with Ollama API endpoints:
     - `/api/chat` - for chat completions
     - `/api/generate` - for text generation
+    - `/api/show` - for retrieving model metadata
     - `/api/tags` - for listing available models
     - `/api/version` - for version information
 
@@ -89,7 +90,9 @@ npm install
 
 # Create .env file with your API keys
 echo "OPENAI_API_KEY=your_openai_api_key" > .env
+echo "OPENAI_API_URL=your_openai_api_url" >> .env # optional, default same as official SDK
 echo "GEMINI_API_KEY=your_gemini_api_key" >> .env
+echo "GEMINI_API_URL=your_gemini_api_url" >> .env # optional, default same as official SDK
 echo "OPENROUTER_API_KEY=your_openrouter_api_key" >> .env
 echo "OPENROUTER_API_URL=your_openrouter_api_url" >> .env  # optional, default is https://openrouter.ai/api/v1
 

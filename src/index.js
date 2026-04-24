@@ -3,6 +3,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import dotenv from 'dotenv';
 import { generateText, streamText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -102,10 +103,16 @@ async function buildOpenAIImageBlocksFromOllama(body) {
 // Initialize providers based on available API keys
 const providers = {};
 if (process.env.OPENAI_API_KEY) {
-    providers.openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  providers.openai = createOpenAI({
+    baseURL: process.env.OPENAI_API_URL,
+    apiKey: process.env.OPENAI_API_KEY
+  });
 }
 if (process.env.GEMINI_API_KEY) {
-    providers.google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY });
+  providers.google = createGoogleGenerativeAI({
+    baseURL: process.env.OPENAI_API_URL,
+    apiKey: process.env.GEMINI_API_KEY
+  });
 }
 if (process.env.OPENROUTER_API_KEY) {
     providers.openrouter = createOpenAI({
@@ -184,14 +191,107 @@ const sendJSON = (response, data, status = 200) =>
 
 
 const validateModel = name => {
-    const config = models[name];
+    const { config } = getModelEntry(name);
+    return config;
+};
+
+const resolveModelName = name => {
+    if (typeof name !== 'string') {
+        return name;
+    }
+
+    if (models[name]) {
+        return name;
+    }
+
+    if (name.endsWith(':latest')) {
+        const nameWithoutLatest = name.slice(0, -':latest'.length);
+        if (models[nameWithoutLatest]) {
+            return nameWithoutLatest;
+        }
+    }
+
+    return name;
+};
+
+const getModelEntry = name => {
+    const resolvedName = resolveModelName(name);
+    const config = models[resolvedName];
     if (!config) {
         throw new Error(`Model ${name} not supported`);
     }
     if (!providers[config.provider]) {
         throw new Error(`Provider ${config.provider} not available`);
     }
-    return config;
+    return { name: resolvedName, config };
+};
+
+const getConfiguredValue = (config, field, fallback) => {
+    if (config.show && Object.prototype.hasOwnProperty.call(config.show, field)) {
+        return config.show[field];
+    }
+    if (Object.prototype.hasOwnProperty.call(config, field)) {
+        return config[field];
+    }
+    return fallback;
+};
+
+const getModelDigest = (name, config) =>
+    getConfiguredValue(config, 'digest', crypto.createHash('sha256').update(name).digest('hex'));
+
+const DEFAULT_MODEL_MODIFIED_AT = new Date().toISOString();
+
+const getModelModifiedAt = config => getConfiguredValue(config, 'modified_at', DEFAULT_MODEL_MODIFIED_AT);
+
+const getModelSize = config => getConfiguredValue(config, 'size', 1000000000);
+
+const buildModelDetails = config => {
+    const configuredDetails = {
+        ...(config.details || {}),
+        ...(config.show?.details || {}),
+    };
+    const family = configuredDetails.family || config.family || getModelArchitecture('', config);
+
+    return {
+        parent_model: configuredDetails.parent_model || config.parent_model || '',
+        format: configuredDetails.format || config.format || 'gguf',
+        family,
+        families: configuredDetails.families || config.families || [family],
+        parameter_size: configuredDetails.parameter_size || config.parameter_size || '0B',
+        quantization_level: configuredDetails.quantization_level || config.quantization_level || 'none',
+        ...configuredDetails,
+    };
+};
+
+const getModelArchitecture = (name, config) =>
+    config.architecture || config.family || config.model_info?.['general.architecture'] || config.show?.model_info?.['general.architecture'] || config.provider || name;
+
+const buildModelInfo = (name, config) => ({
+    'general.architecture': getModelArchitecture(name, config),
+    'general.name': config.model || name,
+    'general.parameter_count': config.parameter_count || 0,
+    [`${getModelArchitecture(name, config)}.context_length`]: config.context_length || 64000,
+    ...(config.model_info || {}),
+    ...(config.show?.model_info || {}),
+});
+
+const buildModelShowResponse = (name, config) => {
+    const responseData = {
+        name,
+        model: name,
+        modelfile: getConfiguredValue(config, 'modelfile', `FROM ${config.model || name}`),
+        parameters: getConfiguredValue(config, 'parameters', ''),
+        template: getConfiguredValue(config, 'template', ''),
+        details: buildModelDetails(config),
+        model_info: buildModelInfo(name, config),
+        capabilities: getConfiguredValue(config, 'capabilities', ['completion']),
+        modified_at: getModelModifiedAt(config),
+        license: getConfiguredValue(config, 'license', ''),
+        size: getModelSize(config),
+        digest: getModelDigest(name, config),
+    };
+
+    return responseData;
 };
 
 // Prepare messages for AI SDK (supports string or content-block arrays)
@@ -494,14 +594,29 @@ const routes = {
     'GET /api/tags': (request, response) => {
         const availableModels = Object.entries(models)
             .filter(([name, config]) => providers[config.provider])
-            .map(([name]) => ({
+            .map(([name, config]) => ({
                 name,
                 model: name,
-                modified_at: new Date().toISOString(),
-                size: 1000000000,
-                digest: `sha256:${name.replace(/[^a-zA-Z0-9]/g, '')}`,
+                modified_at: getModelModifiedAt(config),
+                size: getModelSize(config),
+                digest: getModelDigest(name, config),
+                details: buildModelDetails(config),
             }));
         sendJSON(response, { models: availableModels });
+    },
+    'POST /api/show': async (request, response) => {
+        const body = await getBody(request);
+
+        if (!body.model || typeof body.model !== 'string') {
+            return sendJSON(response, { error: 'model is required' }, 400);
+        }
+
+        try {
+            const { name, config } = getModelEntry(body.model);
+            sendJSON(response, buildModelShowResponse(name, config));
+        } catch (error) {
+            sendJSON(response, { error: error.message }, 404);
+        }
     },
     'POST /api/chat': async (request, response) => {
         await handleModelGenerationRequest(
