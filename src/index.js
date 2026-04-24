@@ -110,7 +110,7 @@ if (process.env.OPENAI_API_KEY) {
 }
 if (process.env.GEMINI_API_KEY) {
   providers.google = createGoogleGenerativeAI({
-    baseURL: process.env.OPENAI_API_URL,
+    baseURL: process.env.GEMINI_API_URL,
     apiKey: process.env.GEMINI_API_KEY
   });
 }
