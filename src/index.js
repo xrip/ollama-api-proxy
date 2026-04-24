@@ -237,7 +237,7 @@ const getConfiguredValue = (config, field, fallback) => {
 };
 
 const getModelDigest = (name, config) =>
-    getConfiguredValue(config, 'digest', crypto.createHash('sha256').update(name).digest('hex'));
+    getConfiguredValue(config, 'digest', 'sha256:' + crypto.createHash('sha256').update(name).digest('hex'));
 
 const DEFAULT_MODEL_MODIFIED_AT = new Date().toISOString();
 
